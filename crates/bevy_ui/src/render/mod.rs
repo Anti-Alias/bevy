@@ -2,10 +2,11 @@ mod pipeline;
 mod render_pass;
 
 use bevy_core_pipeline::{core_2d::Camera2d, core_3d::Camera3d};
+use bevy_sprite::prelude::TextureSlice;
 pub use pipeline::*;
 pub use render_pass::*;
 
-use crate::{prelude::UiCameraConfig, BackgroundColor, CalculatedClip, Node, UiImage, UiStack};
+use crate::{prelude::UiCameraConfig, BackgroundColor, CalculatedClip, Node, UiImage, UiStack, ImageDrawMode};
 use bevy_app::prelude::*;
 use bevy_asset::{load_internal_asset, AssetEvent, Assets, Handle, HandleUntyped};
 use bevy_ecs::prelude::*;
@@ -26,7 +27,7 @@ use bevy_render::{
 };
 use bevy_sprite::{SpriteAssetEvents, TextureAtlas};
 use bevy_text::{Text, TextLayoutInfo};
-use bevy_transform::components::GlobalTransform;
+use bevy_transform::components::{Transform, GlobalTransform};
 use bevy_utils::FloatOrd;
 use bevy_utils::HashMap;
 use bevy_window::{WindowId, Windows};
@@ -205,6 +206,7 @@ pub fn extract_uinodes(
     images: Extract<Res<Assets<Image>>>,
     ui_stack: Extract<Res<UiStack>>,
     windows: Extract<Res<Windows>>,
+    mut slices: Local<Vec<TextureSlice>>,
     uinode_query: Extract<
         Query<(
             &Node,
@@ -225,35 +227,70 @@ pub fn extract_uinodes(
             if !visibility.is_visible() {
                 continue;
             }
-
-            let image = if let Some(image) = maybe_image {
-                image.0.clone_weak()
+            let (image, draw_mode) = if let Some(image) = maybe_image {
+                (image.texture.clone_weak(), &image.draw_mode)
             } else {
-                DEFAULT_IMAGE_HANDLE.typed().clone_weak()
+                (DEFAULT_IMAGE_HANDLE.typed().clone_weak(), &ImageDrawMode::Simple)
             };
-
-            // Skip loading images
-            if !images.contains(&image) {
-                continue;
-            }
+            // Either gets loaded image's size, or skips
+            let image_size = match images.get(&image) {
+                Some(image) => image.size(),
+                None => continue
+            };
             // Skip completely transparent nodes
             if color.0.a() == 0.0 {
                 continue;
             }
 
-            extracted_uinodes.uinodes.push(ExtractedUiNode {
-                stack_index,
-                transform: transform.compute_matrix(),
-                background_color: color.0,
-                rect: Rect {
-                    min: Vec2::ZERO,
-                    max: uinode.calculated_size,
+            match draw_mode {
+                ImageDrawMode::Simple => {
+                    extracted_uinodes.uinodes.push(ExtractedUiNode {
+                        stack_index,
+                        transform: transform.compute_matrix(),
+                        background_color: color.0,
+                        rect: Rect {
+                            min: Vec2::ZERO,
+                            max: uinode.calculated_size,
+                        },
+                        image,
+                        atlas_size: None,
+                        clip: clip.map(|clip| clip.clip),
+                        scale_factor,
+                    });
                 },
-                image,
-                atlas_size: None,
-                clip: clip.map(|clip| clip.clip),
-                scale_factor,
-            });
+                ImageDrawMode::Sliced(slicer) => {
+                    slices.clear();
+                    slicer.compute_slices(
+                        Rect {
+                            min: Vec2::ZERO,
+                            max: image_size,
+                        },
+                        Some(uinode.calculated_size),
+                        &mut slices
+                    );
+                    for slice in &slices {
+                        let tex_rect = slice.texture_rect;
+                        let scale_diff = slice.draw_size / tex_rect.size();
+                        // Negate Y offsets since this code originates from "sprite" which uses an upside-down coordinate system.
+                        let offset = Vec2::new(slice.offset.x, -slice.offset.y);
+                        let transform: GlobalTransform = transform.mul_transform(
+                            Transform::from_translation(offset.extend(0.0)) *
+                            Transform::from_scale(scale_diff.extend(0.0))
+                        );
+
+                        extracted_uinodes.uinodes.push(ExtractedUiNode {
+                            stack_index,
+                            transform: transform.compute_matrix(),
+                            background_color: color.0,
+                            rect: tex_rect,
+                            image: image.clone_weak(),
+                            atlas_size: Some(image_size),
+                            clip: clip.map(|clip| clip.clip),
+                            scale_factor,
+                        });
+                    }
+                }
+            }
         }
     }
 }

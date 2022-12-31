@@ -5,6 +5,7 @@ mod render;
 mod sprite;
 mod texture_atlas;
 mod texture_atlas_builder;
+mod texture_slice;
 
 pub mod collide_aabb;
 
@@ -15,6 +16,7 @@ pub mod prelude {
         sprite::Sprite,
         texture_atlas::{TextureAtlas, TextureAtlasSprite},
         ColorMaterial, ColorMesh2dBundle, TextureAtlasBuilder,
+        texture_slice::{TextureSlice, TextureSlicer, BorderRect, SliceScaleMode}
     };
 }
 

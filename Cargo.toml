@@ -1436,6 +1436,10 @@ wasm = true
 name = "font_atlas_debug"
 path = "examples/ui/font_atlas_debug.rs"
 
+[[example]]
+name = "ninepatch_scaling"
+path = "examples/ui/ninepatch_scaling.rs"
+
 [package.metadata.example.font_atlas_debug]
 name = "Font Atlas Debug"
 description = "Illustrates how FontAtlases are populated (used to optimize text rendering internally)"

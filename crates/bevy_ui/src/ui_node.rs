@@ -1,6 +1,5 @@
 use crate::{Size, UiRect};
 use bevy_asset::Handle;
-use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{prelude::Component, reflect::ReflectComponent};
 use bevy_math::{Rect, Vec2};
 use bevy_reflect::prelude::*;
@@ -8,6 +7,7 @@ use bevy_render::{
     color::Color,
     texture::{Image, DEFAULT_IMAGE_HANDLE},
 };
+use bevy_sprite::prelude::TextureSlicer;
 use serde::{Deserialize, Serialize};
 use std::ops::{Div, DivAssign, Mul, MulAssign};
 use thiserror::Error;
@@ -455,19 +455,47 @@ impl From<Color> for BackgroundColor {
 }
 
 /// The 2D texture displayed for this UI node
-#[derive(Component, Clone, Debug, Reflect, Deref, DerefMut)]
+#[derive(Component, Clone, Debug, Reflect)]
 #[reflect(Component, Default)]
-pub struct UiImage(pub Handle<Image>);
+pub struct UiImage {
+    /// Handle to the texture
+    pub texture: Handle<Image>,
+    /// Define how the image scales when its dimensions change
+    pub draw_mode: ImageDrawMode
+}
+
+#[derive(Reflect, FromReflect, Clone, Debug, Default)]
+#[reflect(Default)]
+pub enum ImageDrawMode {
+    #[default]
+    Simple,
+    Sliced(TextureSlicer)
+}
 
 impl Default for UiImage {
-    fn default() -> Self {
-        Self(DEFAULT_IMAGE_HANDLE.typed())
+    fn default() -> UiImage {
+        UiImage {
+            texture: DEFAULT_IMAGE_HANDLE.typed(),
+            draw_mode: ImageDrawMode::default()
+        }
+    }
+}
+
+impl UiImage {
+    pub fn new(texture: Handle<Image>) -> Self {
+        Self {
+            texture,
+            ..Default::default()
+        }
     }
 }
 
 impl From<Handle<Image>> for UiImage {
     fn from(handle: Handle<Image>) -> Self {
-        Self(handle)
+        Self {
+            texture: handle,
+            draw_mode: ImageDrawMode::Simple
+        }
     }
 }
 
